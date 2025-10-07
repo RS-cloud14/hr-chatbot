@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR Assessment AI</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f8f9fa; height: 100vh; display: flex; flex-direction: column; }
+        .chat-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; text-align: center; }
+        .chat-header h2 { font-size: 18px; margin-bottom: 3px; }
+        .chat-header p { font-size: 11px; opacity: 0.9; }
+        .chat-messages { flex: 1; overflow-y: auto; padding: 15px; }
+        .message { margin-bottom: 12px; display: flex; animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .message.user { justify-content: flex-end; }
+        .message-content { max-width: 75%; padding: 10px 14px; border-radius: 15px; word-wrap: break-word; font-size: 13px; }
+        .message.user .message-content { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .message.assistant .message-content { background: white; color: #333; border: 1px solid #e0e0e0; }
+        .message.system .message-content { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; max-width: 90%; font-size: 12px; }
+        .quick-questions { padding: 8px 15px; background: white; border-top: 1px solid #e0e0e0; display: flex; flex-wrap: wrap; gap: 6px; }
+        .quick-question-btn { padding: 6px 10px; background: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 12px; cursor: pointer; font-size: 11px; color: #333; }
+        .quick-question-btn:hover { background: #e0e0e0; }
+        .chat-input { padding: 15px; background: white; border-top: 1px solid #e0e0e0; display: flex; gap: 8px; }
+        .chat-input input { flex: 1; padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 20px; font-size: 13px; outline: none; }
+        .chat-input input:focus { border-color: #667eea; }
+        .chat-input button { padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 13px; }
+        .chat-input button:hover { transform: scale(1.05); }
+        .chat-input button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .typing-indicator { display: flex; gap: 4px; padding: 8px; }
+        .typing-indicator span { width: 7px; height: 7px; background: #667eea; border-radius: 50%; animation: bounce 1.4s infinite; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }
+    </style>
+</head>
+<body>
+    <div class="chat-header">
+        <h2>🤖 HR Assessment AI Assistant</h2>
+        <p>Ask about the HR Aging Workforce Assessment Tool</p>
+    </div>
+
+    <div class="quick-questions" id="quickQuestions">
+        <button class="quick-question-btn" onclick="askQuestion('What does LOW RISK mean?')">What is LOW RISK?</button>
+        <button class="quick-question-btn" onclick="askQuestion('How do I interpret the replacement cost?')">Replacement cost?</button>
+        <button class="quick-question-btn" onclick="askQuestion('What actions should I take for MODERATE risk?')">MODERATE risk actions?</button>
+        <button class="quick-question-btn" onclick="askQuestion('How is the risk level calculated?')">Risk calculation?</button>
+    </div>
+
+    <div class="chat-messages" id="chatMessages"></div>
+
+    <div class="chat-input">
+        <input type="text" id="messageInput" placeholder="Ask a question..." onkeypress="handleKeyPress(event)">
+        <button onclick="sendMessage()" id="sendBtn">Send</button>
+    </div>
+
+    <script>
+        const apiKey = 'AIzaSyCi-5UbyDGuS5vjnHvo2f0pA4kz_OfBaqo';
+        const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
+
+        const systemContext = `You are an AI assistant for the HR Aging Workforce Assessment Tool. This tool helps HR professionals assess retirement risks in their organization.
+
+Key concepts:
+- RISK LEVELS: LOW, MODERATE, HIGH, CRITICAL (based on how many critical skills are at risk and retirement timeline)
+- Critical Skills At Risk: Number of important positions that could become empty due to retirement
+- Employees Retiring Soon: Number of employees approaching retirement age
+- Total Replacement Cost: Estimated cost to replace retiring employees (in RM - Malaysian Ringgit)
+- Risk assessment considers: industry type, average employee age, and total employees
+- Actions vary by risk level:
+  * LOW: Annual reviews, basic monitoring
+  * MODERATE: Review metrics & update plans annually (Budget: RM 60,000)
+  * HIGH: Quarterly reviews, active succession planning
+  * CRITICAL: Immediate action required, emergency succession planning
+
+The tool uses interactive sliders for:
+- Industry Type (Manufacturing, Services, Healthcare, Technology, Construction)
+- Average Employee Age (35-50)
+- Total Employees (50-1000)
+
+Answer user questions clearly and concisely. Help them understand the metrics, interpret results, and recommend actions.`;
+
+        window.addEventListener('DOMContentLoaded', function() {
+            addMessage('system', 'Welcome! Ask me anything about the HR Aging Workforce Assessment Tool. Try the quick questions above!');
+        });
+
+        function addMessage(role, content) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}`;
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.textContent = content;
+            messageDiv.appendChild(contentDiv);
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function showTyping() {
+            const messagesDiv = document.getElementById('chatMessages');
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'message assistant';
+            typingDiv.id = 'typingIndicator';
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            contentDiv.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+            typingDiv.appendChild(contentDiv);
+            messagesDiv.appendChild(typingDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        function removeTyping() {
+            const typing = document.getElementById('typingIndicator');
+            if (typing) typing.remove();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            addMessage('user', message);
+            input.value = '';
+            input.disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+            showTyping();
+
+            try {
+                const response = await fetch(`${API_URL}?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `${systemContext}\n\nUser question: ${message}` }] }],
+                        generationConfig: { temperature: 0.7, maxOutputTokens: 1024 }
+                    })
+                });
+
+                const data = await response.json();
+                removeTyping();
+
+                if (data.error) {
+                    addMessage('system', 'API Error: ' + data.error.message);
+                } else if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+                    addMessage('assistant', data.candidates[0].content.parts[0].text);
+                } else if (data.candidates && data.candidates[0]?.finishReason === 'SAFETY') {
+                    addMessage('system', 'Response blocked by safety filters. Please rephrase your question.');
+                } else {
+                    addMessage('system', 'Unexpected response format.');
+                }
+            } catch (error) {
+                removeTyping();
+                addMessage('system', 'Connection Error: ' + error.message);
+            }
+
+            input.disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+            input.focus();
+        }
+
+        function askQuestion(question) {
+            document.getElementById('messageInput').value = question;
+            sendMessage();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') sendMessage();
+        }
+    </script>
+</body>
+</html>
